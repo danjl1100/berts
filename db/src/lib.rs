@@ -27,17 +27,20 @@ macro_rules! def_sqlite_struct {
         impl $name {
             #[allow(unused_assignments)]
             /// Bind the metadata for a single entry.
-            pub fn from_row(db_row__: &::rusqlite::Row) -> Self {
+            ///
+            /// # Errors
+            /// Returns an error if the row schema does not match
+            pub fn from_row(db_row__: &::rusqlite::Row) -> Result<Self, rusqlite::Error> {
                 let mut field_idx__ = 0;
 
                 $(
-                    let $field = def_field!(db_row__.get(field_idx__) $(, $func)?);
+                    let $field = def_field!(db_row__.get(field_idx__)? $(, $func)?);
                     field_idx__ += 1;
                 )*
 
-                Self {
+                Ok(Self {
                     $( $field ),*
-                }
+                })
             }
         }
     };
@@ -59,11 +62,14 @@ macro_rules! def_sqlite_struct {
             #[doc = "Bind each of the entries in the `"]
             #[doc = $table]
             #[doc = "` table."]
+            ///
+            /// # Errors
+            /// Returns an error if the SQL query fails
             pub fn read_all(c: &::rusqlite::Connection) ->
                 ::std::result::Result<::std::vec::Vec<Self>, ::rusqlite::Error>
             {
                 let mut stmt = c.prepare(concat!("SELECT * FROM ", $table))?;
-                let rows = stmt.query_map(::rusqlite::NO_PARAMS, Self::from_row)?;
+                let rows = stmt.query_map((), Self::from_row)?;
 
                 let mut v = ::std::vec::Vec::new();
                 for row in rows {
@@ -307,6 +313,10 @@ def_sqlite_struct! {
     ]
 }
 
+/// Reads all the [`Album`]s and [`Item`]s in the specified database
+///
+/// # Errors
+/// Returns an error if the SQL query fails
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_all(db_path: PathBuf) -> Result<(Vec<Album>, Vec<Item>), Error> {
     let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
