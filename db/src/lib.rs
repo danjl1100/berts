@@ -34,7 +34,7 @@ macro_rules! def_sqlite_struct {
                 let mut field_idx__ = 0;
 
                 $(
-                    let $field = def_field!(db_row__.get(field_idx__)? $(, $func)?);
+                    let $field = def_field!(db_row__, field_idx__ $(, $func)?)?;
                     field_idx__ += 1;
                 )*
 
@@ -52,11 +52,11 @@ macro_rules! def_sqlite_struct {
         }
 
         def_sqlite_struct!{
-            $name stringify!($table)
+            $name stringify!($table) => $fields
         }
     };
 
-    ( $name:ident $table:expr ) => {
+    ( $name:ident $table:expr => [ $( $(#[$_inner:meta])* $field:ident : $_typ:ty $(; $_func:ident)?, )* ] ) => {
         #[cfg(not(target_arch = "wasm32"))]
         impl $name {
             #[doc = "Bind each of the entries in the `"]
@@ -68,7 +68,7 @@ macro_rules! def_sqlite_struct {
             pub fn read_all(c: &::rusqlite::Connection) ->
                 ::std::result::Result<::std::vec::Vec<Self>, ::rusqlite::Error>
             {
-                let mut stmt = c.prepare(concat!("SELECT * FROM ", $table))?;
+                let mut stmt = c.prepare(concat!("SELECT ", $(stringify!($field), ",",)* "id FROM ", $table))?;
                 let rows = stmt.query_map((), Self::from_row)?;
 
                 let mut v = ::std::vec::Vec::new();
@@ -83,11 +83,11 @@ macro_rules! def_sqlite_struct {
 }
 
 macro_rules! def_field {
-    ( $defn:expr, $func:ident ) => {
-        $func($defn)
+    ( $row:expr, $field_idx:expr, $func:ident ) => {
+        $func($row, $field_idx)
     };
-    ( $defn:expr ) => {
-        $defn
+    ( $row:expr, $field_idx:expr ) => {
+        $row.get($field_idx)
     };
 }
 
@@ -95,9 +95,25 @@ macro_rules! def_field {
 fn blob_to_path(v: Vec<u8>) -> PathBuf {
     String::from(String::from_utf8_lossy(&v)).into()
 }
+// different `beets` versions seem to use different BLOB/TEXT formats for paths
+fn str_or_blob_to_path(
+    row: &rusqlite::Row,
+    idx: impl rusqlite::RowIndex + Copy,
+) -> Result<PathBuf, rusqlite::Error> {
+    row.get(idx)
+        .or_else(|_| {
+            let value: Vec<u8> = row.get(idx)?;
+            Ok(String::from_utf8_lossy(&value).to_string())
+        })
+        .map(String::into)
+}
 
-fn optional_blob_to_path(v: Option<Vec<u8>>) -> Option<PathBuf> {
-    v.map(blob_to_path)
+fn optional_blob_to_path(
+    row: &rusqlite::Row,
+    idx: impl rusqlite::RowIndex,
+) -> Result<Option<PathBuf>, rusqlite::Error> {
+    let value: Option<Vec<u8>> = row.get(idx)?;
+    Ok(value.map(blob_to_path))
 }
 
 fn is_num_zero<T: Default + PartialEq>(n: &T) -> bool {
@@ -185,7 +201,7 @@ def_sqlite_struct! {
         id: u32,
         /// This is converted lossily - any invalid UTF-8 will be
         /// [transcribed as the replacement character.](https://doc.rust-lang.org/std/string/struct.String.html#method.from_utf8_lossy)
-        path: PathBuf; blob_to_path,
+        path: PathBuf; str_or_blob_to_path,
         #[serde(skip_serializing_if = "Option::is_none", default)]
         album_id: Option<u32>,
         title: String,
