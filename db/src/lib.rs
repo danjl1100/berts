@@ -8,9 +8,58 @@ extern crate serde_derive;
 use std::path::PathBuf;
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use rusqlite::Error;
+#[derive(Debug)]
+pub struct Error {
+    source: rusqlite::Error,
+    kind: ErrorKind,
+}
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug)]
+enum ErrorKind {
+    Row(TableColumn),
+    Open,
+    Query,
+    Unknown,
+}
+#[cfg(not(target_arch = "wasm32"))]
+impl From<rusqlite::Error> for Error {
+    fn from(source: rusqlite::Error) -> Self {
+        Self {
+            source,
+            kind: ErrorKind::Unknown,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Clone, Copy, Debug)]
+struct TableColumn {
+    table: &'static str,
+    column: &'static str,
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 use rusqlite::{Connection, OpenFlags};
+
+#[cfg(not(target_arch = "wasm32"))]
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+#[cfg(not(target_arch = "wasm32"))]
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.kind {
+            ErrorKind::Row(TableColumn { table, column }) => {
+                write!(f, "failed to get column {column:?} in table {table:?}")
+            }
+            ErrorKind::Open => write!(f, "failed to open database"),
+            ErrorKind::Query => write!(f, "failed to query database"),
+            ErrorKind::Unknown => write!(f, "unspecified SQL error"),
+        }
+    }
+}
 
 mod tests;
 
@@ -30,11 +79,15 @@ macro_rules! def_sqlite_struct {
             ///
             /// # Errors
             /// Returns an error if the row schema does not match
-            pub fn from_row(db_row__: &::rusqlite::Row) -> Result<Self, rusqlite::Error> {
+            pub fn from_row(db_row__: &::rusqlite::Row) -> Result<Self, $crate::Error> {
                 let mut field_idx__ = 0;
 
                 $(
-                    let $field = def_field!(db_row__, field_idx__ $(, $func)?)?;
+                    let row = LocalRow(db_row__, TableColumn {
+                        table: stringify!($name),
+                        column: stringify!($field),
+                    });
+                    let $field = def_field!(row, field_idx__ $(, $func)?)?;
                     field_idx__ += 1;
                 )*
 
@@ -66,10 +119,11 @@ macro_rules! def_sqlite_struct {
             /// # Errors
             /// Returns an error if the SQL query fails
             pub fn read_all(c: &::rusqlite::Connection) ->
-                ::std::result::Result<::std::vec::Vec<Self>, ::rusqlite::Error>
+                ::std::result::Result<::std::vec::Vec<Self>, $crate::Error>
             {
                 let mut stmt = c.prepare(concat!("SELECT ", $(stringify!($field), ",",)* "id FROM ", $table))?;
-                let rows = stmt.query_map((), Self::from_row)?;
+                let rows = stmt.query_and_then((), Self::from_row)
+                    .map_err(|source| Error { source, kind: ErrorKind::Query })?;
 
                 let mut v = ::std::vec::Vec::new();
                 for row in rows {
@@ -91,15 +145,30 @@ macro_rules! def_field {
     };
 }
 
+#[derive(Clone, Copy)]
+struct LocalRow<'a, 'b>(&'b rusqlite::Row<'a>, TableColumn);
+impl LocalRow<'_, '_> {
+    fn get<T>(self, idx: impl rusqlite::RowIndex) -> Result<T, Error>
+    where
+        T: rusqlite::types::FromSql,
+    {
+        let Self(row, table_column) = self;
+        row.get(idx).map_err(|source| Error {
+            source,
+            kind: ErrorKind::Row(table_column),
+        })
+    }
+}
+
 #[allow(clippy::needless_pass_by_value)]
 fn blob_to_path(v: Vec<u8>) -> PathBuf {
     String::from(String::from_utf8_lossy(&v)).into()
 }
 // different `beets` versions seem to use different BLOB/TEXT formats for paths
 fn str_or_blob_to_path(
-    row: &rusqlite::Row,
+    row: LocalRow,
     idx: impl rusqlite::RowIndex + Copy,
-) -> Result<PathBuf, rusqlite::Error> {
+) -> Result<PathBuf, Error> {
     row.get(idx)
         .or_else(|_| {
             let value: Vec<u8> = row.get(idx)?;
@@ -109,9 +178,9 @@ fn str_or_blob_to_path(
 }
 
 fn optional_blob_to_path(
-    row: &rusqlite::Row,
+    row: LocalRow,
     idx: impl rusqlite::RowIndex,
-) -> Result<Option<PathBuf>, rusqlite::Error> {
+) -> Result<Option<PathBuf>, Error> {
     let value: Option<Vec<u8>> = row.get(idx)?;
     Ok(value.map(blob_to_path))
 }
@@ -335,6 +404,10 @@ def_sqlite_struct! {
 /// Returns an error if the SQL query fails
 #[cfg(not(target_arch = "wasm32"))]
 pub fn read_all(db_path: PathBuf) -> Result<(Vec<Album>, Vec<Item>), Error> {
-    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY) //rustfmt-hint
+        .map_err(|source| Error {
+            source,
+            kind: ErrorKind::Open,
+        })?;
     Ok((Album::read_all(&conn)?, Item::read_all(&conn)?))
 }
