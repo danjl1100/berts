@@ -148,11 +148,11 @@ def_sqlite_struct! {
         #[serde(skip_serializing_if = "String::is_empty", default)]
         genre: String,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        year: u16,
+        year: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        month: u8,
+        month: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        day: u8,
+        day: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
         disctotal: u32,
         comp: bool,
@@ -185,13 +185,13 @@ def_sqlite_struct! {
         #[serde(skip_serializing_if = "Option::is_none", default)]
         rg_album_peak: Option<f64>,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        r128_album_gain: u32,
+        r128_album_gain: Option<i32>,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        original_year: u16,
+        original_year: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        original_month: u8,
+        original_month: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        original_day: u8,
+        original_day: u32,
  ]
 }
 
@@ -231,7 +231,7 @@ def_sqlite_struct! {
         #[serde(skip_serializing_if = "String::is_empty", default)]
         grouping: String,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        year: u16,
+        year: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
         month: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
@@ -300,15 +300,15 @@ def_sqlite_struct! {
         #[serde(skip_serializing_if = "Option::is_none", default)]
         rg_album_peak: Option<f64>,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        r128_track_gain: u32,
+        r128_track_gain: Option<i32>,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        r128_album_gain: u32,
+        r128_album_gain: Option<i32>,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        original_year: u16,
+        original_year: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        original_month: u8,
+        original_month: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        original_day: u8,
+        original_day: u32,
         #[serde(skip_serializing_if = "Option::is_none", default)]
         initial_key: Option<String>,
         length: f64,
@@ -319,9 +319,9 @@ def_sqlite_struct! {
         #[serde(skip_serializing_if = "is_num_zero", default)]
         samplerate: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        bitdepth: u16,
+        bitdepth: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        channels: u8,
+        channels: u32,
         #[serde(skip, default)]
         mtime: f64,
         #[serde(skip, default)]
