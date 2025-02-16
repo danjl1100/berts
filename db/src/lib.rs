@@ -19,14 +19,14 @@ enum ErrorKind {
     Row(TableColumn),
     Open,
     Query,
-    Unknown,
+    UnknownTransparent,
 }
 #[cfg(not(target_arch = "wasm32"))]
 impl From<rusqlite::Error> for Error {
     fn from(source: rusqlite::Error) -> Self {
         Self {
             source,
-            kind: ErrorKind::Unknown,
+            kind: ErrorKind::UnknownTransparent,
         }
     }
 }
@@ -44,7 +44,11 @@ use rusqlite::{Connection, OpenFlags};
 #[cfg(not(target_arch = "wasm32"))]
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.source)
+        match &self.kind {
+            ErrorKind::Row(_) | ErrorKind::Open | ErrorKind::Query => Some(&self.source),
+            // Unknown is transparent
+            ErrorKind::UnknownTransparent => self.source.source(),
+        }
     }
 }
 #[cfg(not(target_arch = "wasm32"))]
@@ -56,7 +60,8 @@ impl std::fmt::Display for Error {
             }
             ErrorKind::Open => write!(f, "failed to open database"),
             ErrorKind::Query => write!(f, "failed to query database"),
-            ErrorKind::Unknown => write!(f, "unspecified SQL error"),
+            // Unknown is transparent
+            ErrorKind::UnknownTransparent => write!(f, "{}", self.source),
         }
     }
 }
