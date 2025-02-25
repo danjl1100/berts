@@ -117,6 +117,11 @@ macro_rules! def_sqlite_struct {
     ( $name:ident $table:expr => [ $( $(#[$_inner:meta])* $field:ident : $_typ:ty $(; $_func:ident)?, )* ] ) => {
         #[cfg(not(target_arch = "wasm32"))]
         impl $name {
+            #[doc = "Query string for all fieldname columns for the `"]
+            #[doc = $table]
+            #[doc = "` table."]
+            pub const SQL_QUERY: &str = concat!("SELECT ", $(stringify!($field), ",",)* "id FROM ", $table);
+
             #[doc = "Bind each of the entries in the `"]
             #[doc = $table]
             #[doc = "` table."]
@@ -126,7 +131,7 @@ macro_rules! def_sqlite_struct {
             pub fn read_all(c: &::rusqlite::Connection) ->
                 ::std::result::Result<::std::vec::Vec<Self>, $crate::Error>
             {
-                let mut stmt = c.prepare(concat!("SELECT ", $(stringify!($field), ",",)* "id FROM ", $table))?;
+                let mut stmt = c.prepare(Self::SQL_QUERY)?;
                 let rows = stmt.query_and_then((), Self::from_row)
                     .map_err(|source| Error { source, kind: ErrorKind::Query })?;
 
@@ -374,9 +379,9 @@ def_sqlite_struct! {
         #[serde(skip_serializing_if = "Option::is_none", default)]
         rg_album_peak: Option<f64>,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        r128_track_gain: Option<i32>,
+        r128_track_gain: Option<f64>,
         #[serde(skip_serializing_if = "is_num_zero", default)]
-        r128_album_gain: Option<i32>,
+        r128_album_gain: Option<f64>,
         #[serde(skip_serializing_if = "is_num_zero", default)]
         original_year: u32,
         #[serde(skip_serializing_if = "is_num_zero", default)]
