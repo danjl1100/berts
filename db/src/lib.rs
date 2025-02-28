@@ -30,6 +30,11 @@ impl From<rusqlite::Error> for Error {
         }
     }
 }
+impl From<Error> for rusqlite::Error {
+    fn from(value: Error) -> Self {
+        value.source
+    }
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Clone, Copy, Debug)]
