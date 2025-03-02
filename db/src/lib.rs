@@ -127,6 +127,8 @@ macro_rules! def_sqlite_struct {
             #[doc = "` table."]
             pub const SQL_QUERY: &str = concat!("SELECT ", $(stringify!($field), ",",)* "id FROM ", $table);
 
+            pub const COLUMNS: &[&str] = &[ $(stringify!($field)),* ];
+
             #[doc = "Bind each of the entries in the `"]
             #[doc = $table]
             #[doc = "` table."]
